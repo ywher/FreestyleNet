@@ -2,5 +2,5 @@ data/
 logs/
 models/*.pth
 models/**/*.ckpt
-openai/
+openai
 outputs/
