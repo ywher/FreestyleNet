@@ -14,6 +14,7 @@ from ldm.models.diffusion.ddim import DDIMSampler
 from ldm.models.diffusion.plms import PLMSSampler
 from ldm.data.COCO import COCO_dict
 from ldm.data.ADE20K import ADE20K_dict
+from ldm.data.Cityscapes import City_dict
 
 from torch.utils.data import DataLoader, Dataset
 
@@ -104,6 +105,53 @@ class ADE20KVal(Dataset):
         text = ''
         for i in range(len(class_ids)):
             text += ADE20K_dict[str(class_ids[i])]
+            text += ' '
+            class_ids_final[class_ids[i]] = 1
+        text = text[:-1]
+        example["caption"] = text
+        example["class_ids"] = class_ids_final
+
+        return example
+    
+class CityscapesVal(Dataset):
+    def __init__(self,
+                 data_root,
+                 txt_file,
+                 size=512,
+                 interpolation="bicubic",
+                 ):
+        self.data_root = data_root
+        self.data_paths = txt_file
+        with open(self.data_paths, "r") as f:
+            self.image_paths = f.read().splitlines()
+        self._length = len(self.image_paths)
+        self.size = size
+        self.interpolation = {"linear": PIL.Image.LINEAR,
+                              "bilinear": PIL.Image.BILINEAR,
+                              "bicubic": PIL.Image.BICUBIC,
+                              "lanczos": PIL.Image.LANCZOS,
+                              }[interpolation]
+
+    def __len__(self):
+        return self._length
+
+    def __getitem__(self, i):
+        example = dict()
+        path = self.image_paths[i]
+        img_path, lb_path = path.split(' ')[0], path.split(' ')[1]
+        pil_label = Image.open(lb_path)
+        example["img_name"] = img_path.split('/')[-1]
+
+        pil_label = pil_label.resize((self.size, self.size), resample=PIL.Image.NEAREST)
+        label = np.array(pil_label).astype(np.float32)
+        example["label"] = label
+        class_ids = sorted(np.unique(label.astype(np.uint8)))
+        if class_ids[-1] == 255:
+            class_ids = class_ids[:-1]
+        class_ids_final = np.zeros(19)
+        text = ''
+        for i in range(len(class_ids)):
+            text += City_dict[str(class_ids[i])]
             text += ' '
             class_ids_final[class_ids[i]] = 1
         text = text[:-1]
@@ -239,7 +287,7 @@ def main():
         "--dataset",
         type=str,
         help="which dataset to evaluate",
-        choices=["COCO", "ADE20K"],
+        choices=["COCO", "ADE20K", "Cityscapes"],
         default="COCO"
     )
 
@@ -265,6 +313,8 @@ def main():
         val_dataset = COCOVal(data_root=opt.data_root, txt_file=opt.txt_file)
     elif opt.dataset == "ADE20K":
         val_dataset = ADE20KVal(data_root=opt.data_root, txt_file=opt.txt_file)
+    elif opt.dataset == "Cityscapes":
+        val_dataset = CityscapesVal(data_root=opt.data_root, txt_file=opt.txt_file)
 
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, num_workers=2, shuffle=False)
 
